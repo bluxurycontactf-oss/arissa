@@ -34,9 +34,14 @@ export default function ParametresPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const [waStatus, setWaStatus] = useState<"disconnected" | "connecting" | "qr" | "connected">("disconnected");
+  const [waStatus, setWaStatus] = useState<"disconnected" | "connecting" | "qr" | "pairing" | "connected">("disconnected");
   const [waQr, setWaQr] = useState<string | null>(null);
+  const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
   const [waDisconnecting, setWaDisconnecting] = useState(false);
+  const [waMode, setWaMode] = useState<"qr" | "pairing">("qr");
+  const [waPhone, setWaPhone] = useState("");
+  const [waRequestingCode, setWaRequestingCode] = useState(false);
+  const [waPhoneError, setWaPhoneError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -65,10 +70,11 @@ export default function ParametresPage() {
     async function poll() {
       try {
         const res = await apiFetch("/api/agent/whatsapp/status");
-        const data = (await res.json()) as { status: typeof waStatus; qr: string | null };
+        const data = (await res.json()) as { status: typeof waStatus; qr: string | null; pairingCode: string | null };
         if (!cancelled) {
           setWaStatus(data.status);
           setWaQr(data.qr);
+          setWaPairingCode(data.pairingCode);
         }
       } catch {
         // ignore, will retry
@@ -89,8 +95,30 @@ export default function ParametresPage() {
       await apiFetch("/api/agent/whatsapp/disconnect", { method: "POST" });
       setWaStatus("disconnected");
       setWaQr(null);
+      setWaPairingCode(null);
     } finally {
       setWaDisconnecting(false);
+    }
+  }
+
+  async function handleRequestPairingCode(e: FormEvent) {
+    e.preventDefault();
+    setWaPhoneError(null);
+    setWaRequestingCode(true);
+    try {
+      const res = await apiFetch("/api/agent/whatsapp/pairing-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: waPhone }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Échec de la génération du code.");
+      setWaPairingCode(data.code);
+      setWaStatus("pairing");
+    } catch (err) {
+      setWaPhoneError((err as Error).message);
+    } finally {
+      setWaRequestingCode(false);
     }
   }
 
@@ -192,18 +220,68 @@ export default function ParametresPage() {
               {waDisconnecting ? "Déconnexion..." : "Déconnecter"}
             </button>
           </div>
-        ) : waStatus === "qr" && waQr ? (
-          <div className="flex flex-col items-center gap-3 rounded-2xl bg-surface-light p-6">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={waQr} alt="QR code WhatsApp" className="h-56 w-56 rounded-xl bg-white p-2" />
-            <p className="text-sm text-muted text-center max-w-xs">
-              Ouvrez WhatsApp sur votre téléphone → Paramètres → Appareils connectés → Connecter un appareil, puis scannez ce code.
-            </p>
-          </div>
         ) : (
-          <div className="rounded-2xl bg-surface-light p-5 text-sm text-muted">
-            Génération du QR code en cours...
-          </div>
+          <>
+            <div className="flex gap-2 border-b border-border-soft pb-3">
+              {([
+                { id: "qr", label: "QR code" },
+                { id: "pairing", label: "Code d'appairage" },
+              ] as const).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setWaMode(tab.id)}
+                  className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                    waMode === tab.id ? "bg-gradient-to-r from-primary to-primary-2 text-white" : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {waMode === "qr" ? (
+              waStatus === "qr" && waQr ? (
+                <div className="flex flex-col items-center gap-3 rounded-2xl bg-surface-light p-6">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={waQr} alt="QR code WhatsApp" className="h-56 w-56 rounded-xl bg-white p-2" />
+                  <p className="text-sm text-muted text-center max-w-xs">
+                    Ouvrez WhatsApp sur votre téléphone → Paramètres → Appareils connectés → Connecter un appareil, puis scannez ce code.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-2xl bg-surface-light p-5 text-sm text-muted">Génération du QR code en cours...</div>
+              )
+            ) : waStatus === "pairing" && waPairingCode ? (
+              <div className="flex flex-col items-center gap-3 rounded-2xl bg-surface-light p-6">
+                <p className="font-display text-3xl font-semibold tracking-widest gradient-text">{waPairingCode}</p>
+                <p className="text-sm text-muted text-center max-w-xs">
+                  Ouvrez WhatsApp sur votre téléphone → Paramètres → Appareils connectés → Connecter avec un numéro de téléphone, puis entrez ce code.
+                </p>
+                <button
+                  onClick={() => { setWaPairingCode(null); setWaStatus("disconnected"); }}
+                  className="text-sm text-muted hover:text-foreground transition-colors underline"
+                >
+                  Générer un nouveau code
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleRequestPairingCode} className="flex flex-col gap-4 rounded-2xl bg-surface-light p-5">
+                <FormField
+                  label="Numéro de téléphone WhatsApp (format international, sans +)"
+                  type="tel"
+                  placeholder="33612345678"
+                  value={waPhone}
+                  onChange={(e) => setWaPhone(e.target.value)}
+                  required
+                />
+                {waPhoneError && <p className="text-sm text-red-400">{waPhoneError}</p>}
+                <SubmitButton type="submit" className="sm:w-fit" disabled={waRequestingCode}>
+                  {waRequestingCode ? "Génération..." : "Obtenir le code"}
+                </SubmitButton>
+              </form>
+            )}
+          </>
         )}
       </section>
 
