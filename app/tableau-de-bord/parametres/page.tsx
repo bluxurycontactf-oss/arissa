@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, FormEvent } from "react";
-import { User, Mail, Bell, CreditCard, ArrowRight, MessageCircle, CheckCircle2 } from "lucide-react";
+import { User, Mail, Bell, CreditCard, ArrowRight, MessageCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { updateProfile, updateEmail, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
@@ -43,6 +43,10 @@ export default function ParametresPage() {
   const [waRequestingCode, setWaRequestingCode] = useState(false);
   const [waPhoneError, setWaPhoneError] = useState<string | null>(null);
   const [waReconnecting, setWaReconnecting] = useState(false);
+
+  const [waContacts, setWaContacts] = useState<{ jid: string; auto_reply: number; created_at: string }[]>([]);
+  const [waContactsLoading, setWaContactsLoading] = useState(true);
+  const [waTogglingJid, setWaTogglingJid] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -89,6 +93,34 @@ export default function ParametresPage() {
       clearInterval(interval);
     };
   }, []);
+
+  async function refreshWaContacts() {
+    try {
+      const res = await apiFetch("/api/agent/whatsapp/contacts");
+      const data = (await res.json()) as { contacts: typeof waContacts };
+      setWaContacts(data.contacts);
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    refreshWaContacts().finally(() => setWaContactsLoading(false));
+  }, []);
+
+  async function toggleContactAutoReply(jid: string, currentAutoReply: number) {
+    setWaTogglingJid(jid);
+    try {
+      await apiFetch(`/api/agent/whatsapp/contacts/${encodeURIComponent(jid)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoReply: currentAutoReply !== 1 }),
+      });
+      await refreshWaContacts();
+    } finally {
+      setWaTogglingJid(null);
+    }
+  }
 
   async function handleWaDisconnect() {
     setWaDisconnecting(true);
@@ -311,6 +343,60 @@ export default function ParametresPage() {
               </form>
             )}
           </>
+        )}
+      </section>
+
+      <section className="rounded-3xl border border-border-soft bg-surface p-6 flex flex-col gap-6">
+        <h2 className="font-display font-semibold flex items-center gap-2">
+          <MessageCircle size={18} className="text-primary-2" />
+          Contacts WhatsApp
+        </h2>
+        <p className="text-sm text-muted leading-relaxed">
+          Par défaut, le jumeau répond automatiquement à qui vous écrit sur WhatsApp. Désactivez la réponse
+          automatique pour un contact : le jumeau suivra alors la discussion en silence et vous enverra en privé
+          une remarque ou suggestion s&apos;il détecte quelque chose d&apos;important.
+        </p>
+
+        {waContactsLoading ? (
+          <p className="text-sm text-muted">Chargement...</p>
+        ) : waContacts.length === 0 ? (
+          <p className="text-sm text-muted">Aucun contact pour l&apos;instant. Les contacts apparaissent ici après leur premier message.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {waContacts.map((c) => {
+              const autoReply = c.auto_reply === 1;
+              const busy = waTogglingJid === c.jid;
+              return (
+                <div key={c.jid} className="flex items-center justify-between gap-4 rounded-2xl bg-surface-light px-4 py-3 text-sm">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {autoReply ? (
+                      <Eye size={16} className="text-emerald-400 shrink-0" />
+                    ) : (
+                      <EyeOff size={16} className="text-muted shrink-0" />
+                    )}
+                    <div className="truncate">
+                      <p className="font-medium truncate">+{c.jid.split("@")[0]}</p>
+                      <p className="text-xs text-muted">{autoReply ? "Réponse automatique active" : "Mode observation silencieuse"}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toggleContactAutoReply(c.jid, c.auto_reply)}
+                    disabled={busy}
+                    className={`relative h-6 w-11 shrink-0 rounded-full border border-border-soft transition-colors disabled:opacity-50 ${
+                      autoReply ? "bg-gradient-to-r from-primary to-primary-2" : "bg-surface"
+                    }`}
+                    aria-label="Activer ou désactiver la réponse automatique"
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                        autoReply ? "translate-x-5" : ""
+                      }`}
+                    />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         )}
       </section>
 
