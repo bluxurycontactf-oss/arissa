@@ -51,7 +51,7 @@ export default function ConnexionPage() {
         <FormField label="Mot de passe" type="password" name="password" placeholder="••••••••" required icon={<Lock size={16} />} />
 
         <div className="flex justify-end -mt-1">
-          <Link href="#" className="text-xs text-primary-2 hover:underline">
+          <Link href="/mot-de-passe-oublie" className="text-xs text-primary-2 hover:underline">
             Mot de passe oublié ?
           </Link>
         </div>
