@@ -221,6 +221,13 @@ export default function ParametresPage() {
   async function handleRequestPairingCode(e: FormEvent) {
     e.preventDefault();
     setWaPhoneError(null);
+
+    const digits = waPhone.replace(/\D/g, "");
+    if (digits.length < 10) {
+      setWaPhoneError("Numéro trop court : n'oubliez pas l'indicatif du pays (ex: 229 pour le Bénin) suivi du numéro complet.");
+      return;
+    }
+
     setWaRequestingCode(true);
     try {
       const res = await apiFetch("/api/agent/whatsapp/pairing-code", {
@@ -401,13 +408,17 @@ export default function ParametresPage() {
                   <p className="text-sm text-muted">Le code précédent a expiré (5 minutes écoulées). Demandez-en un nouveau.</p>
                 )}
                 <FormField
-                  label="Numéro de téléphone WhatsApp (format international, sans +)"
+                  label="Numéro WhatsApp avec l'indicatif du pays (obligatoire)"
                   type="tel"
-                  placeholder="33612345678"
+                  placeholder="22997439379"
                   value={waPhone}
                   onChange={(e) => setWaPhone(e.target.value)}
                   required
                 />
+                <p className="text-xs text-muted -mt-2">
+                  Indicatif pays + numéro complet, sans espace (avec ou sans +). Exemple pour le Bénin (229) : 22997439379.
+                  N&apos;oubliez pas l&apos;indicatif, sinon WhatsApp refusera la connexion.
+                </p>
                 {waPhoneError && <p className="text-sm text-red-400">{waPhoneError}</p>}
                 <SubmitButton type="submit" className="sm:w-fit" disabled={waRequestingCode}>
                   {waRequestingCode ? "Génération..." : "Obtenir le code"}
