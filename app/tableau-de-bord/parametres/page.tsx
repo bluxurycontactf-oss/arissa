@@ -66,9 +66,12 @@ export default function ParametresPage() {
     unlock_viewonce: number;
     anti_delete: number;
     appear_online: number;
+    proxy_url: string;
   };
   const [waSettings, setWaSettings] = useState<WaSettings | null>(null);
   const [waSettingsSaving, setWaSettingsSaving] = useState<string | null>(null);
+  const [waProxyInput, setWaProxyInput] = useState("");
+  const [waProxySaving, setWaProxySaving] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -175,7 +178,10 @@ export default function ParametresPage() {
   useEffect(() => {
     apiFetch("/api/agent/whatsapp/settings")
       .then((r) => r.json())
-      .then((d: { settings: WaSettings }) => setWaSettings(d.settings))
+      .then((d: { settings: WaSettings }) => {
+        setWaSettings(d.settings);
+        setWaProxyInput(d.settings.proxy_url ?? "");
+      })
       .catch(() => {});
   }, []);
 
@@ -194,6 +200,22 @@ export default function ParametresPage() {
       setWaSettings(data.settings);
     } finally {
       setWaSettingsSaving(null);
+    }
+  }
+
+  async function handleSaveProxy(e: FormEvent) {
+    e.preventDefault();
+    setWaProxySaving(true);
+    try {
+      const res = await apiFetch("/api/agent/whatsapp/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proxyUrl: waProxyInput.trim() }),
+      });
+      const data = (await res.json()) as { settings: WaSettings };
+      setWaSettings(data.settings);
+    } finally {
+      setWaProxySaving(false);
     }
   }
 
@@ -503,6 +525,30 @@ export default function ParametresPage() {
                 </button>
               </div>
             ))}
+
+            <form onSubmit={handleSaveProxy} className="flex flex-col gap-3 pt-2">
+              <div>
+                <p className="text-sm font-medium text-foreground/90">Proxy (recommandé)</p>
+                <p className="text-xs text-muted mt-0.5">
+                  WhatsApp bloque souvent les connexions directes depuis un serveur cloud. Indiquez l&apos;URL d&apos;un
+                  proxy résidentiel/mobile à votre charge (ex: <code>http://user:pass@host:port</code> ou{" "}
+                  <code>socks5://user:pass@host:port</code>) pour que la connexion passe par cette IP au lieu de
+                  celle du serveur. Laissez vide pour ne pas utiliser de proxy.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="text"
+                  value={waProxyInput}
+                  onChange={(e) => setWaProxyInput(e.target.value)}
+                  placeholder="http://user:pass@host:port"
+                  className="flex-1 rounded-2xl border border-border-soft bg-surface px-4 py-2.5 text-sm outline-none focus:border-primary/60 font-mono"
+                />
+                <SubmitButton type="submit" className="sm:w-fit" disabled={waProxySaving}>
+                  {waProxySaving ? "Enregistrement..." : "Enregistrer le proxy"}
+                </SubmitButton>
+              </div>
+            </form>
           </div>
         )}
       </section>
