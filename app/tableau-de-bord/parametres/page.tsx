@@ -34,7 +34,7 @@ export default function ParametresPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const [waStatus, setWaStatus] = useState<"disconnected" | "connecting" | "qr" | "pairing" | "connected">("disconnected");
+  const [waStatus, setWaStatus] = useState<"disconnected" | "connecting" | "qr" | "pairing" | "connected" | "expired">("disconnected");
   const [waQr, setWaQr] = useState<string | null>(null);
   const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
   const [waDisconnecting, setWaDisconnecting] = useState(false);
@@ -42,6 +42,7 @@ export default function ParametresPage() {
   const [waPhone, setWaPhone] = useState("");
   const [waRequestingCode, setWaRequestingCode] = useState(false);
   const [waPhoneError, setWaPhoneError] = useState<string | null>(null);
+  const [waReconnecting, setWaReconnecting] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -98,6 +99,18 @@ export default function ParametresPage() {
       setWaPairingCode(null);
     } finally {
       setWaDisconnecting(false);
+    }
+  }
+
+  async function handleWaReconnect() {
+    setWaReconnecting(true);
+    try {
+      await apiFetch("/api/agent/whatsapp/reconnect", { method: "POST" });
+      setWaStatus("connecting");
+      setWaQr(null);
+      setWaPairingCode(null);
+    } finally {
+      setWaReconnecting(false);
     }
   }
 
@@ -246,8 +259,21 @@ export default function ParametresPage() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={waQr} alt="QR code WhatsApp" className="h-56 w-56 rounded-xl bg-white p-2" />
                   <p className="text-sm text-muted text-center max-w-xs">
-                    Ouvrez WhatsApp sur votre téléphone → Paramètres → Appareils connectés → Connecter un appareil, puis scannez ce code.
+                    Ouvrez WhatsApp sur votre téléphone → Paramètres → Appareils connectés → Connecter un appareil, puis scannez ce code dans les 5 minutes.
                   </p>
+                </div>
+              ) : waStatus === "expired" ? (
+                <div className="flex flex-col items-center gap-3 rounded-2xl bg-surface-light p-6">
+                  <p className="text-sm text-muted text-center max-w-xs">
+                    Ce QR code a expiré (5 minutes écoulées). Générez-en un nouveau pour connecter WhatsApp.
+                  </p>
+                  <button
+                    onClick={handleWaReconnect}
+                    disabled={waReconnecting}
+                    className="rounded-full bg-gradient-to-r from-primary to-primary-2 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {waReconnecting ? "Génération..." : "Générer un nouveau QR code"}
+                  </button>
                 </div>
               ) : (
                 <div className="rounded-2xl bg-surface-light p-5 text-sm text-muted">Génération du QR code en cours...</div>
@@ -256,7 +282,7 @@ export default function ParametresPage() {
               <div className="flex flex-col items-center gap-3 rounded-2xl bg-surface-light p-6">
                 <p className="font-display text-3xl font-semibold tracking-widest gradient-text">{waPairingCode}</p>
                 <p className="text-sm text-muted text-center max-w-xs">
-                  Ouvrez WhatsApp sur votre téléphone → Paramètres → Appareils connectés → Connecter avec un numéro de téléphone, puis entrez ce code.
+                  Ouvrez WhatsApp sur votre téléphone → Paramètres → Appareils connectés → Connecter avec un numéro de téléphone, puis entrez ce code dans les 5 minutes.
                 </p>
                 <button
                   onClick={() => { setWaPairingCode(null); setWaStatus("disconnected"); }}
@@ -267,6 +293,9 @@ export default function ParametresPage() {
               </div>
             ) : (
               <form onSubmit={handleRequestPairingCode} className="flex flex-col gap-4 rounded-2xl bg-surface-light p-5">
+                {waStatus === "expired" && (
+                  <p className="text-sm text-muted">Le code précédent a expiré (5 minutes écoulées). Demandez-en un nouveau.</p>
+                )}
                 <FormField
                   label="Numéro de téléphone WhatsApp (format international, sans +)"
                   type="tel"
