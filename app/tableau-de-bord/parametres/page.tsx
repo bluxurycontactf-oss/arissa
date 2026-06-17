@@ -38,11 +38,14 @@ export default function ParametresPage() {
   const [waQr, setWaQr] = useState<string | null>(null);
   const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
   const [waDisconnecting, setWaDisconnecting] = useState(false);
-  const [waMode, setWaMode] = useState<"qr" | "pairing">("qr");
+  const [waMode, setWaMode] = useState<"qr" | "pairing" | "import">("qr");
   const [waPhone, setWaPhone] = useState("");
   const [waRequestingCode, setWaRequestingCode] = useState(false);
   const [waPhoneError, setWaPhoneError] = useState<string | null>(null);
   const [waReconnecting, setWaReconnecting] = useState(false);
+  const [waSessionString, setWaSessionString] = useState("");
+  const [waImporting, setWaImporting] = useState(false);
+  const [waImportError, setWaImportError] = useState<string | null>(null);
 
   const [waContacts, setWaContacts] = useState<{ jid: string; auto_reply: number; created_at: string }[]>([]);
   const [waContactsLoading, setWaContactsLoading] = useState(true);
@@ -246,6 +249,27 @@ export default function ParametresPage() {
     }
   }
 
+  async function handleImportSession(e: FormEvent) {
+    e.preventDefault();
+    setWaImportError(null);
+    setWaImporting(true);
+    try {
+      const res = await apiFetch("/api/agent/whatsapp/import-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionString: waSessionString.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Échec de l'import de la session.");
+      setWaSessionString("");
+      setWaStatus("connecting");
+    } catch (err) {
+      setWaImportError((err as Error).message);
+    } finally {
+      setWaImporting(false);
+    }
+  }
+
   async function handleProfileSave(e: FormEvent) {
     e.preventDefault();
     if (!user) return;
@@ -350,6 +374,7 @@ export default function ParametresPage() {
               {([
                 { id: "qr", label: "QR code" },
                 { id: "pairing", label: "Code d'appairage" },
+                { id: "import", label: "Importer une session" },
               ] as const).map((tab) => (
                 <button
                   key={tab.id}
@@ -422,6 +447,28 @@ export default function ParametresPage() {
                 {waPhoneError && <p className="text-sm text-red-400">{waPhoneError}</p>}
                 <SubmitButton type="submit" className="sm:w-fit" disabled={waRequestingCode}>
                   {waRequestingCode ? "Génération..." : "Obtenir le code"}
+                </SubmitButton>
+              </form>
+            )}
+
+            {waMode === "import" && (
+              <form onSubmit={handleImportSession} className="flex flex-col gap-4 rounded-2xl bg-surface-light p-5">
+                <p className="text-sm text-muted leading-relaxed">
+                  WhatsApp bloque souvent les connexions directes depuis un serveur cloud. Connectez-vous plutôt
+                  depuis votre ordinateur avec le script fourni (dossier <code className="text-foreground">local-pairing</code> du
+                  backend, voir son README), puis collez ici la chaîne de session qu&apos;il génère.
+                </p>
+                <textarea
+                  value={waSessionString}
+                  onChange={(e) => setWaSessionString(e.target.value)}
+                  rows={6}
+                  placeholder="Collez ici la chaîne de session générée par le script local..."
+                  className="w-full rounded-2xl border border-border-soft bg-surface px-5 py-3 text-sm outline-none transition-colors focus:border-primary/60 resize-none font-mono"
+                  required
+                />
+                {waImportError && <p className="text-sm text-red-400">{waImportError}</p>}
+                <SubmitButton type="submit" className="sm:w-fit" disabled={waImporting}>
+                  {waImporting ? "Import en cours..." : "Importer et connecter"}
                 </SubmitButton>
               </form>
             )}
