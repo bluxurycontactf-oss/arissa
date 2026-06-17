@@ -62,7 +62,6 @@ export default function ParametresPage() {
   type WaSettings = {
     unlock_viewonce: number;
     anti_delete: number;
-    status_forward: number;
     appear_online: number;
   };
   const [waSettings, setWaSettings] = useState<WaSettings | null>(null);
@@ -178,7 +177,7 @@ export default function ParametresPage() {
   }, []);
 
   async function patchWaSettings(
-    key: "unlockViewonce" | "antiDelete" | "statusForward" | "appearOnline",
+    key: "unlockViewonce" | "antiDelete" | "appearOnline",
     value: boolean
   ) {
     setWaSettingsSaving(key);
@@ -423,7 +422,6 @@ export default function ParametresPage() {
             {([
               { key: "unlockViewonce" as const, value: waSettings.unlock_viewonce, label: "Débloquer les vues uniques", desc: "Les photos/vidéos à vue unique reçues sont renvoyées dans votre propre discussion." },
               { key: "antiDelete" as const, value: waSettings.anti_delete, label: "Récupérer les messages supprimés", desc: "Si un contact supprime un message, vous le recevez quand même en privé." },
-              { key: "statusForward" as const, value: waSettings.status_forward, label: "Voir tous les statuts instantanément", desc: "Chaque statut de vos contacts vous est transmis en privé dès sa publication." },
               { key: "appearOnline" as const, value: waSettings.appear_online, label: "Apparaître en ligne", desc: "Les messages ne sont jamais marqués comme lus automatiquement — seul votre téléphone déclenche les deux traits bleus quand vous ouvrez vraiment la discussion." },
             ]).map((s) => (
               <div key={s.key} className="flex items-center justify-between gap-4">
