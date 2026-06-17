@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, FormEvent } from "react";
-import { User, Mail, Bell, CreditCard, ArrowRight } from "lucide-react";
+import { User, Mail, Bell, CreditCard, ArrowRight, MessageCircle, CheckCircle2 } from "lucide-react";
 import { updateProfile, updateEmail, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
@@ -34,6 +34,10 @@ export default function ParametresPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const [waStatus, setWaStatus] = useState<"disconnected" | "connecting" | "qr" | "connected">("disconnected");
+  const [waQr, setWaQr] = useState<string | null>(null);
+  const [waDisconnecting, setWaDisconnecting] = useState(false);
+
   useEffect(() => {
     if (user) {
       setDisplayName(user.displayName ?? "");
@@ -54,6 +58,41 @@ export default function ParametresPage() {
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const res = await apiFetch("/api/agent/whatsapp/status");
+        const data = (await res.json()) as { status: typeof waStatus; qr: string | null };
+        if (!cancelled) {
+          setWaStatus(data.status);
+          setWaQr(data.qr);
+        }
+      } catch {
+        // ignore, will retry
+      }
+    }
+
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  async function handleWaDisconnect() {
+    setWaDisconnecting(true);
+    try {
+      await apiFetch("/api/agent/whatsapp/disconnect", { method: "POST" });
+      setWaStatus("disconnected");
+      setWaQr(null);
+    } finally {
+      setWaDisconnecting(false);
+    }
+  }
 
   async function handleProfileSave(e: FormEvent) {
     e.preventDefault();
@@ -128,6 +167,44 @@ export default function ParametresPage() {
             {profileLoading ? "Enregistrement..." : "Enregistrer les modifications"}
           </SubmitButton>
         </form>
+      </section>
+
+      <section className="rounded-3xl border border-border-soft bg-surface p-6 flex flex-col gap-6">
+        <h2 className="font-display font-semibold flex items-center gap-2">
+          <MessageCircle size={18} className="text-primary-2" />
+          WhatsApp
+        </h2>
+        <p className="text-sm text-muted leading-relaxed">
+          Connectez votre WhatsApp pour que votre jumeau puisse envoyer des messages en votre nom.
+        </p>
+
+        {waStatus === "connected" ? (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl bg-surface-light p-5">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 size={20} className="text-emerald-400" />
+              <span className="font-semibold">WhatsApp connecté</span>
+            </div>
+            <button
+              onClick={handleWaDisconnect}
+              disabled={waDisconnecting}
+              className="self-start sm:self-auto rounded-full border border-border-soft px-5 py-2.5 text-sm font-semibold text-muted hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              {waDisconnecting ? "Déconnexion..." : "Déconnecter"}
+            </button>
+          </div>
+        ) : waStatus === "qr" && waQr ? (
+          <div className="flex flex-col items-center gap-3 rounded-2xl bg-surface-light p-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={waQr} alt="QR code WhatsApp" className="h-56 w-56 rounded-xl bg-white p-2" />
+            <p className="text-sm text-muted text-center max-w-xs">
+              Ouvrez WhatsApp sur votre téléphone → Paramètres → Appareils connectés → Connecter un appareil, puis scannez ce code.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-surface-light p-5 text-sm text-muted">
+            Génération du QR code en cours...
+          </div>
+        )}
       </section>
 
       <section className="rounded-3xl border border-border-soft bg-surface p-6 flex flex-col gap-6">
