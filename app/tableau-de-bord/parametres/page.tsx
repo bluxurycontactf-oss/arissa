@@ -48,6 +48,17 @@ export default function ParametresPage() {
   const [waContactsLoading, setWaContactsLoading] = useState(true);
   const [waTogglingJid, setWaTogglingJid] = useState<string | null>(null);
 
+  type WaGroup = {
+    group_jid: string;
+    name: string;
+    welcome_enabled: number;
+    welcome_message: string;
+    antispam_enabled: number;
+  };
+  const [waGroups, setWaGroups] = useState<WaGroup[]>([]);
+  const [waGroupsLoading, setWaGroupsLoading] = useState(true);
+  const [waGroupSaving, setWaGroupSaving] = useState<string | null>(null);
+
   useEffect(() => {
     if (user) {
       setDisplayName(user.displayName ?? "");
@@ -119,6 +130,34 @@ export default function ParametresPage() {
       await refreshWaContacts();
     } finally {
       setWaTogglingJid(null);
+    }
+  }
+
+  async function refreshWaGroups() {
+    try {
+      const res = await apiFetch("/api/agent/whatsapp/groups");
+      const data = (await res.json()) as { groups: WaGroup[] };
+      setWaGroups(data.groups);
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    refreshWaGroups().finally(() => setWaGroupsLoading(false));
+  }, []);
+
+  async function patchGroup(groupJid: string, patch: Partial<{ welcomeEnabled: boolean; welcomeMessage: string; antispamEnabled: boolean }>) {
+    setWaGroupSaving(groupJid);
+    try {
+      await apiFetch(`/api/agent/whatsapp/groups/${encodeURIComponent(groupJid)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      await refreshWaGroups();
+    } finally {
+      setWaGroupSaving(null);
     }
   }
 
@@ -393,6 +432,83 @@ export default function ParametresPage() {
                       }`}
                     />
                   </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-3xl border border-border-soft bg-surface p-6 flex flex-col gap-6">
+        <h2 className="font-display font-semibold flex items-center gap-2">
+          <MessageCircle size={18} className="text-primary-2" />
+          Groupes WhatsApp
+        </h2>
+        <p className="text-sm text-muted leading-relaxed">
+          Activez un message de bienvenue automatique pour les nouveaux membres, ou un anti-spam qui supprime les
+          messages envoyés trop rapidement et avertit l&apos;auteur (nécessite que votre compte soit administrateur
+          du groupe).
+        </p>
+
+        {waGroupsLoading ? (
+          <p className="text-sm text-muted">Chargement...</p>
+        ) : waGroups.length === 0 ? (
+          <p className="text-sm text-muted">Aucun groupe détecté. Les groupes apparaissent ici une fois WhatsApp connecté.</p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {waGroups.map((g) => {
+              const saving = waGroupSaving === g.group_jid;
+              return (
+                <div key={g.group_jid} className="rounded-2xl bg-surface-light p-4 flex flex-col gap-4">
+                  <p className="font-semibold text-sm truncate">{g.name || g.group_jid.split("@")[0]}</p>
+
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-sm text-foreground/90">Message de bienvenue</span>
+                    <button
+                      onClick={() => patchGroup(g.group_jid, { welcomeEnabled: g.welcome_enabled !== 1 })}
+                      disabled={saving}
+                      className={`relative h-6 w-11 shrink-0 rounded-full border border-border-soft transition-colors disabled:opacity-50 ${
+                        g.welcome_enabled === 1 ? "bg-gradient-to-r from-primary to-primary-2" : "bg-surface"
+                      }`}
+                      aria-label="Activer ou désactiver le message de bienvenue"
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                          g.welcome_enabled === 1 ? "translate-x-5" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {g.welcome_enabled === 1 && (
+                    <textarea
+                      defaultValue={g.welcome_message}
+                      onBlur={(e) => {
+                        if (e.target.value !== g.welcome_message) patchGroup(g.group_jid, { welcomeMessage: e.target.value });
+                      }}
+                      rows={2}
+                      placeholder="Bienvenue {nom} dans le groupe !"
+                      className="w-full rounded-xl border border-border-soft bg-surface px-4 py-2.5 text-sm outline-none focus:border-primary/60 resize-none"
+                    />
+                  )}
+
+                  <div className="flex items-center justify-between gap-4 pt-2 border-t border-border-soft">
+                    <span className="text-sm text-foreground/90">Anti-spam</span>
+                    <button
+                      onClick={() => patchGroup(g.group_jid, { antispamEnabled: g.antispam_enabled !== 1 })}
+                      disabled={saving}
+                      className={`relative h-6 w-11 shrink-0 rounded-full border border-border-soft transition-colors disabled:opacity-50 ${
+                        g.antispam_enabled === 1 ? "bg-gradient-to-r from-primary to-primary-2" : "bg-surface"
+                      }`}
+                      aria-label="Activer ou désactiver l'anti-spam"
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                          g.antispam_enabled === 1 ? "translate-x-5" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               );
             })}
